@@ -8,9 +8,18 @@
     <div class="w-1/2">
         <UInput v-model="githubUsername" />
       </div>
-    <section class="flex">
-      
 
+      <h2>Repos</h2>
+    <div class="">
+      
+      <div v-for="repo in rawData"
+      class="w-1/3 overflow-hidden inline-block align-top"
+      >
+        <RepoSummary :repo="repo" />
+      </div>
+    </div>
+    
+    <section class="flex">
       <div class="w-1/4">
         <h2>Repos</h2>
         <UTable :rows="repos" />
@@ -32,7 +41,7 @@
       </div>
     </section>
 
-    <div class="w-full max-h-96 overflow-y-auto p-8">
+    <div class="w-full 96 overflow-y-auto p-8">
       <VueJsonPretty :data="rawData" />
     </div>
   </section>
@@ -49,8 +58,11 @@ const prs = ref([])
 const branches = ref([])
 const milestones = ref([])
 
-onMounted(async () => {
+const pollFrequency = 1000 * 60 // 1 minute
 
+
+async function fetchLatestGithubInfo() {
+  console.log(`fetching latest github info for ${githubUsername.value}`)
   const {data} = await $fetch('/api/github', {
     method: 'POST',
     headers: {
@@ -60,14 +72,24 @@ onMounted(async () => {
       username: githubUsername.value
     }
   })
-  rawData.value = data
+  rawData.value = data.combinedRepoData
 
   repos.value = data.repos
   prs.value = data.prs
   branches.value = data.branches
   milestones.value = data.milestones
+}
+
+onMounted(async () => {
+
+  await fetchLatestGithubInfo()
+  pollResume()
 
 })
+
+const { pause: pollPause, resume: pollResume, isActive: pollActive } = useIntervalFn(() => {
+  fetchLatestGithubInfo()  
+}, pollFrequency)
 
 </script>
 

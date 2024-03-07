@@ -59,6 +59,13 @@ async function getRepositoryData(username) {
   });
   const branches = await Promise.all(branchesPromises);
 
+  // filter out `main` and `master` branches
+  const filteredBranches = branches.map((branch) => {
+    return branch.filter((branch) => branch.name !== 'main' && branch.name !== 'master')
+  })
+
+  const flattenedBranches = filteredBranches.flat()
+
   // make an array of repo labels based on the index
   // this is a little hacky, but it's the easiest way to get the labels to show up in the right order
   const repoLabels = repos.map((repo, index) => {
@@ -67,12 +74,23 @@ async function getRepositoryData(username) {
     }
   })
 
+  // now we can go back and pull each repo's info into its own object rather than having them all separate
+  const combinedRepoData = repos.map((repo, index) => {
+    return {
+      ...repo,
+      prs: prs[index],
+      milestones: milestones[index],
+      branches: filteredBranches[index]
+    }
+  })
+
   return {
+    combinedRepoData,
     repoLabels,
     repos,
-    prs: prs,
-    milestones: milestones,
-    branches: branches
+    prs,
+    milestones,
+    branches: flattenedBranches
   }
 }
 
