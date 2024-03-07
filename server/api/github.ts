@@ -5,46 +5,80 @@ import { Octokit } from '@octokit/rest'
 const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN })
 
 async function getRepositoryData(username) {
-  const repos = await octokit.rest.repos.listForUser({
-    username,
+  // const repos = await octokit.rest.repos.listForUser({
+  //   username,
+  //   sort: 'updated',
+  //   per_page: 10
+  // })
+
+  // additionally, we want to fold in all the repos for the room302studio org
+  const repoRaw = await octokit.rest.repos.listForOrg({
+    // org: 'room302studio',
+    org: username,
     sort: 'updated',
-    per_page: 1
+    per_page: 10
   })
 
-  if (repos.data.length === 0) {
+  const repos = repoRaw.data
+
+  // combine the two lists
+  // repos.data = repos.data.concat(orgRepos.data)  
+
+  if (repos.length === 0) {
     throw new Error('No repositories found')
   }
 
-  const repo = repos.data[0]
+  const prsPromises = repos.map(async (repository) => {
+    const prsForRepo = await octokit.rest.pulls.list({
+      owner: 'room302studio',
+      repo: repository.name,
+      state: 'open'
+    })
+    return prsForRepo.data;
+  });
+  const prs = await Promise.all(prsPromises);
+  console.log(prs)
 
-  const prs = await octokit.rest.pulls.list({
-    owner: username,
-    repo: repo.name,
-    state: 'open'
-  })
+  const milestonesPromises = repos.map(async (repository) => {
+    const milestonesForRepo = await octokit.rest.issues.listMilestones({
+      owner: 'room302studio',
+      repo: repository.name,
+      state: 'open'
+    })
+    return milestonesForRepo.data;
+  });
+  const milestones = await Promise.all(milestonesPromises);
 
-  const milestones = await octokit.rest.issues.listMilestones({
-    owner: username,
-    repo: repo.name,
-    state: 'open'
-  })
+  const branchesPromises = repos.map(async (repository) => {
+    const branchesForRepo = await octokit.rest.repos.listBranches({
+      owner: 'room302studio',
+      repo: repository.name,
+      per_page: 5
+    })
+    return branchesForRepo.data;
+  });
+  const branches = await Promise.all(branchesPromises);
 
-  const branches = await octokit.rest.repos.listBranches({
-    owner: username,
-    repo: repo.name
+  // make an array of repo labels based on the index
+  // this is a little hacky, but it's the easiest way to get the labels to show up in the right order
+  const repoLabels = repos.map((repo, index) => {
+    return {
+      name: repo.name
+    }
   })
 
   return {
-    repoName: repo.name,
-    prs: prs.data,
-    milestones: milestones.data,
-    branches: branches.data
+    repoLabels,
+    repos,
+    prs: prs,
+    milestones: milestones,
+    branches: branches
   }
 }
 
 export default defineEventHandler(async (event) => {
   try {
-    const requestBody = await useBody(event)
+    const requestBody = await readBody(event)
     if (!requestBody.username) {
       return createError({
         statusCode: 400,
